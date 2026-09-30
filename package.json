@@ -1,0 +1,19 @@
+{
+  "name": "dev-toolkit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared CI workflow, lint/TS config, and process conventions used across moshfeu's repos",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test '.github/workflows/lib/*.test.ts'"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0",
+    "eslint": "^9.19.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.1"
+  }
+}

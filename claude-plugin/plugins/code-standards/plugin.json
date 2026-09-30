@@ -1,0 +1,5 @@
+{
+  "name": "code-standards",
+  "version": "1.0.0",
+  "description": "Shared coding/code-review standards -- comments, test helpers, constants -- generalized from moshfeu/my-openclaw's original skill of the same name."
+}

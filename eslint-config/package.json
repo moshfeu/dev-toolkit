@@ -1,0 +1,11 @@
+{
+  "name": "@moshfeu/eslint-config",
+  "version": "1.0.0",
+  "description": "Shared ESLint flat config (typescript-eslint recommended + a configurable no-direct-process.env rule)",
+  "type": "module",
+  "main": "index.js",
+  "peerDependencies": {
+    "eslint": ">=9",
+    "typescript-eslint": ">=8"
+  }
+}

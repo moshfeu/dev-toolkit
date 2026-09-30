@@ -1,0 +1,6 @@
+{
+  "name": "@moshfeu/tsconfig-base",
+  "version": "1.0.0",
+  "description": "Shared strict TypeScript compiler options, extended by consumer tsconfig.json files",
+  "files": ["base.json"]
+}

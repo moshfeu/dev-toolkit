@@ -1,0 +1,127 @@
+name: Release metadata
+
+# Every PR must add a new version section to CHANGELOG.md. This checks that,
+# then commits a bump of package.json/package-lock.json to that version onto
+# the PR branch, so the changelog is the source of truth and nobody edits the
+# version by hand. Label a PR `skip-release` to opt out (docs-only, CI-only).
+#
+# Two jobs on purpose: `check` runs a script from the PR branch, so it only
+# gets a read-only token; `bump` holds the write token but runs only fixed
+# commands, never code from the PR.
+#
+# Reusable: call this from another repo's workflow with
+#   jobs:
+#     release-metadata:
+#       uses: moshfeu/dev-toolkit/.github/workflows/release-metadata.yml@main
+# A reusable workflow invoked via `uses:` from a job shares the calling
+# workflow run's `github` context, so `github.event.pull_request` below is
+# populated as long as the *caller* workflow is itself triggered by
+# `pull_request`.
+on:
+  pull_request:
+    branches: [ main, master ]
+    types: [ opened, synchronize, reopened, labeled, unlabeled ]
+  workflow_call: {}
+
+concurrency:
+  group: release-metadata-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-release') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      target: ${{ steps.release.outputs.target }}
+      needs_bump: ${{ steps.release.outputs.needs_bump }}
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+
+      - name: Checkout dev-toolkit's own release-metadata script
+        # The `lib/` script lives in *this* repo (dev-toolkit), not in the
+        # caller's checkout above -- fetch it into a separate directory so a
+        # caller repo's own files are never overwritten or trusted for logic.
+        uses: actions/checkout@v4
+        with:
+          repository: moshfeu/dev-toolkit
+          ref: main
+          path: .dev-toolkit
+          sparse-checkout: |
+            .github/workflows/lib
+
+      - name: Install release-metadata's own dependencies (tsx)
+        # This job checks out and runs a script from the *caller* repo's PR
+        # branch with a read-only token, so it never runs the caller repo's
+        # own npm scripts -- it only needs tsx to execute dev-toolkit's own
+        # checked-out lib script below.
+        run: npm install --no-save tsx@^4
+
+      - name: Check changelog and version
+        id: release
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          git remote add upstream "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags upstream "$BASE_REF"
+          base="upstream/$BASE_REF"
+          changed=false
+          if git diff --name-only "$base"...HEAD | grep -qx 'CHANGELOG.md'; then changed=true; fi
+          base_version=$(git show "$base:package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+          node --import tsx .dev-toolkit/.github/workflows/lib/release-metadata.ts --base-version "$base_version" --changelog-changed "$changed" --output "$GITHUB_OUTPUT"
+
+      - name: Fork PRs can't be bumped automatically
+        if: steps.release.outputs.needs_bump == 'true' && github.event.pull_request.head.repo.fork
+        env:
+          TARGET: ${{ steps.release.outputs.target }}
+        run: |
+          echo "::error::CHANGELOG.md says $TARGET but package.json/package-lock.json differ. Run 'npm version $TARGET --no-git-tag-version' and push."
+          exit 1
+
+  bump:
+    needs: check
+    if: ${{ needs.check.outputs.needs_bump == 'true' && !github.event.pull_request.head.repo.fork }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to push the bump commit to the PR branch
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          # Pushes made with the default GITHUB_TOKEN don't trigger other
+          # workflows (so CI wouldn't re-run on the bump commit). A PAT or
+          # GitHub App token in RELEASE_TOKEN does; without it we fall back.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+
+      - name: Bump version to match the changelog
+        env:
+          TARGET: ${{ needs.check.outputs.target }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if ! printf '%s' "$TARGET" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Unexpected version '$TARGET'"
+            exit 1
+          fi
+          npm version "$TARGET" --no-git-tag-version --ignore-scripts
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: bump version to $TARGET"
+          git push origin "HEAD:$HEAD_REF"
