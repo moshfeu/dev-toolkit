@@ -20,11 +20,17 @@ jobs:
     uses: moshfeu/dev-toolkit/.github/workflows/release-metadata.yml@main
 ```
 
-The calling workflow must itself be triggered by `pull_request` (the reused
-workflow reads `github.event.pull_request` from the caller's context). The
-consumer repo needs a `CHANGELOG.md` with `## [x.y.z] - <date>` headings, a
-`package.json`, and a `package-lock.json`. See
-`docs/changelog-source-of-truth.md` for the full convention.
+The calling workflow must itself be triggered by `pull_request` (a reusable
+workflow invoked via `uses:` shares the calling run's `github` context, so
+`github.event.pull_request` is only populated if the *caller* is itself
+triggered by `pull_request`). The consumer repo needs a `CHANGELOG.md` with
+`## [x.y.z] - <date>` headings, a `package.json`, and a `package-lock.json`.
+See `docs/changelog-source-of-truth.md` for the full convention. Label a PR
+`skip-release` to opt out (docs-only, CI-only changes).
+
+Two jobs on purpose: `check` runs a script from the PR branch, so it only
+gets a read-only token; `bump` holds the write token but runs only fixed
+commands, never code from the PR.
 
 ### `eslint-config/` — `@moshfeu/eslint-config`
 
@@ -41,6 +47,12 @@ config module). Install via a git dependency:
 import sharedConfig from '@moshfeu/eslint-config';
 export default [...sharedConfig({ configFiles: ['src/lib/config.ts'] })];
 ```
+
+Options: `configFiles` — path(s) allowed to read `process.env` directly;
+omit or pass `false` to skip the restriction entirely. `extraEnvExemptFiles`
+— extra globs to exempt beyond the default (`**/*.test.{js,ts}`,
+`test-setup.{js,ts}`). `ignores` — globs excluded from linting entirely
+(defaults to `node_modules/**`, `dist/**`).
 
 ### `tsconfig-base/` — `@moshfeu/tsconfig-base`
 

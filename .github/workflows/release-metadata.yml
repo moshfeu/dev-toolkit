@@ -1,22 +1,6 @@
 name: Release metadata
 
-# Every PR must add a new version section to CHANGELOG.md. This checks that,
-# then commits a bump of package.json/package-lock.json to that version onto
-# the PR branch, so the changelog is the source of truth and nobody edits the
-# version by hand. Label a PR `skip-release` to opt out (docs-only, CI-only).
-#
-# Two jobs on purpose: `check` runs a script from the PR branch, so it only
-# gets a read-only token; `bump` holds the write token but runs only fixed
-# commands, never code from the PR.
-#
-# Reusable: call this from another repo's workflow with
-#   jobs:
-#     release-metadata:
-#       uses: moshfeu/dev-toolkit/.github/workflows/release-metadata.yml@main
-# A reusable workflow invoked via `uses:` from a job shares the calling
-# workflow run's `github` context, so `github.event.pull_request` below is
-# populated as long as the *caller* workflow is itself triggered by
-# `pull_request`.
+# See the "release-metadata.yml" section in this repo's README.md.
 on:
   pull_request:
     branches: [ main, master ]
