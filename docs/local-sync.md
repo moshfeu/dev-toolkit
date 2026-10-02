@@ -8,12 +8,13 @@ file in the repo, with no fetch step at all.
 
 ## What each consumer repo wires up
 
-1. **A `postinstall` script** in the consumer's own `package.json`:
+1. **A `postinstall` script** in the consumer's own `package.json`,
+   **guarded** against `dev-toolkit` not being installed:
 
    ```json
    {
      "scripts": {
-       "postinstall": "node node_modules/dev-toolkit/scripts/sync-docs.js",
+       "postinstall": "test -f node_modules/dev-toolkit/scripts/sync-docs.js && node node_modules/dev-toolkit/scripts/sync-docs.js || true",
        "sync-docs": "node node_modules/dev-toolkit/scripts/sync-docs.js"
      }
    }
@@ -22,6 +23,14 @@ file in the repo, with no fetch step at all.
    This copies `docs/` into a local, gitignored `.dev-toolkit/docs/` on every
    `npm install` — add `.dev-toolkit/` to `.gitignore`. The `sync-docs` alias
    is there to run it by hand (see the `--ignore-scripts` caveat below).
+
+   The guard is not optional: `dev-toolkit` is a `devDependency`, so any
+   production-only install (`npm ci --omit=dev`, `npm install --omit=dev` —
+   check the consumer's own `Dockerfile`) omits it entirely from
+   `node_modules`. An unguarded `postinstall` then crashes with
+   `Cannot find module '.../dev-toolkit/scripts/sync-docs.js'` and takes the
+   *entire* install down with it — this broke a Docker build in both
+   `travel-tracker` and `my-openclaw` the first time this was wired up.
 
 2. **A synchronous Claude Code `SessionStart` hook** that runs `npm install`
    before the session's first turn — see the `session-start-hook` skill.

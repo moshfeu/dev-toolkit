@@ -88,11 +88,13 @@ cross-link to avoid duplication going stale in two places.
 ### `scripts/sync-docs.js` — local doc vendoring
 
 Copies `docs/` from `node_modules/dev-toolkit` into the consumer repo's own
-`.dev-toolkit/docs/` (gitignored). Wire it into the consumer's `postinstall`
-so it refreshes on every `npm install`:
+`.dev-toolkit/docs/` (gitignored). Wire it into the consumer's `postinstall`,
+**guarded** against a production-only install that omits this devDependency
+(`npm ci --omit=dev` — check the consumer's `Dockerfile`), so it refreshes on
+every full `npm install` without crashing a prod-only one:
 
 ```json
-{ "scripts": { "postinstall": "node node_modules/dev-toolkit/scripts/sync-docs.js", "sync-docs": "node node_modules/dev-toolkit/scripts/sync-docs.js" } }
+{ "scripts": { "postinstall": "test -f node_modules/dev-toolkit/scripts/sync-docs.js && node node_modules/dev-toolkit/scripts/sync-docs.js || true", "sync-docs": "node node_modules/dev-toolkit/scripts/sync-docs.js" } }
 ```
 
 See `docs/local-sync.md` for why this needs to be paired with a `SessionStart`
