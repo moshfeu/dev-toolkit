@@ -147,10 +147,26 @@ that repos link to rather than duplicate:
 - `pre-pr-self-review-checklist.md`
 - `comments-philosophy.md`
 - `pr-review-automation.md` — every consumer repo's agents must follow this one: subscribe to a PR's review activity right after opening it, in every repo, not just on request.
+- `local-sync.md` — every consumer repo must follow this one too: wire up `scripts/sync-docs.js` (below) and a synchronous `SessionStart` hook, and link `AGENTS.md` at the local synced path, not a GitHub URL.
 
 A consuming repo's own `AGENTS.md`/`CLAUDE.md` should link to the relevant
 file here instead of restating it, the same way `my-openclaw`'s own docs
 cross-link to avoid duplication going stale in two places.
+
+### `scripts/sync-docs.js` — local doc vendoring
+
+Copies `docs/` from `node_modules/dev-toolkit` into the consumer repo's own
+`.dev-toolkit/docs/` (gitignored). Wire it into the consumer's `postinstall`,
+**guarded** against a production-only install that omits this devDependency
+(`npm ci --omit=dev` — check the consumer's `Dockerfile`), so it refreshes on
+every full `npm install` without crashing a prod-only one:
+
+```json
+{ "scripts": { "postinstall": "test -f node_modules/dev-toolkit/scripts/sync-docs.js && node node_modules/dev-toolkit/scripts/sync-docs.js || true", "sync-docs": "node node_modules/dev-toolkit/scripts/sync-docs.js" } }
+```
+
+See `docs/local-sync.md` for why this needs to be paired with a `SessionStart`
+hook, and what to link from `AGENTS.md`.
 
 ### `claude-plugin/` — Claude Code skill plugin
 
