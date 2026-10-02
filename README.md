@@ -65,6 +65,8 @@ that repos link to rather than duplicate:
 - `tech-debt-register-pattern.md`
 - `pii-and-logging.md`
 - `pre-pr-self-review-checklist.md`
+- `comments-philosophy.md`
+- `pr-review-automation.md` — every consumer repo's agents must follow this one: subscribe to a PR's review activity right after opening it, in every repo, not just on request.
 
 A consuming repo's own `AGENTS.md`/`CLAUDE.md` should link to the relevant
 file here instead of restating it, the same way `my-openclaw`'s own docs
