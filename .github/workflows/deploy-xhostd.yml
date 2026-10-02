@@ -40,7 +40,10 @@ on:
         description: The xhostd deploy that was followed (new, or the one already in flight).
         value: ${{ jobs.deploy.outputs.deploy-id }}
       status:
-        description: Terminal status of that deploy (`success` or `failed`).
+        description: >-
+          Outcome: the deploy's terminal status (`success`, `failed`, ...), or
+          `timeout` / `error` if the workflow gave up on it, or `not-started` if
+          it never got to start one.
         value: ${{ jobs.deploy.outputs.status }}
 
 jobs:
@@ -118,6 +121,7 @@ jobs:
           deadline=$(( $(date +%s) + TIMEOUT_MINUTES * 60 ))
           check_deadline() {
             if [ "$(date +%s)" -ge "$deadline" ]; then
+              outcome=timeout
               echo "::error::Timed out after $TIMEOUT_MINUTES min ($1). Any deploy already started keeps running on xhostd; check it with get_deploy_log."
               exit 1
             fi
@@ -149,6 +153,36 @@ jobs:
           target=${SHA:-$REF}
           deploy_id=
           status=
+          outcome=
+
+          # Runs on every exit once a target is known (success, failure,
+          # timeout, giving up on the API): always sets the `status` output
+          # and writes the job summary, and shows the build-log tail for a
+          # deploy that didn't succeed.
+          finish() {
+            local rc=$?
+            trap - EXIT
+            if [ -z "$deploy_id" ]; then
+              status=not-started
+            else
+              case $status in queued | running | '') status=${outcome:-error} ;; esac
+            fi
+            echo "status=$status" >>"$GITHUB_OUTPUT"
+            {
+              echo "### xhostd deploy: \`$APP\` / \`$CHANNEL\`"
+              echo "- target: \`$target\`"
+              echo "- deploy id: \`${deploy_id:-none}\`"
+              echo "- status: **$status**"
+            } >>"$GITHUB_STEP_SUMMARY"
+            if [ -n "$deploy_id" ] && [ "$status" != success ]; then
+              echo "::group::Last 16 KiB of the build log"
+              call GET "$base/logs?deploy=$deploy_id" | jq -r '.log' || true
+              echo "::endgroup::"
+            fi
+            exit "$rc"
+          }
+          trap finish EXIT
+
           # Never start a second deploy while one is in flight. If it is the
           # very commit we want, follow it; otherwise wait for it to finish
           # and then deploy ours, so the newer commit still ships.
@@ -178,19 +212,7 @@ jobs:
           echo "deploy_id=$deploy_id" >>"$GITHUB_OUTPUT"
 
           wait_for "$deploy_id"
-          echo "status=$status" >>"$GITHUB_OUTPUT"
-
-          {
-            echo "### xhostd deploy: \`$APP\` / \`$CHANNEL\`"
-            echo "- target: \`$target\`"
-            echo "- deploy id: \`$deploy_id\`"
-            echo "- status: **$status**"
-          } >>"$GITHUB_STEP_SUMMARY"
-
           if [ "$status" != success ]; then
-            echo "::group::Last 16 KiB of the build log"
-            call GET "$base/logs?deploy=$deploy_id" | jq -r '.log' || true
-            echo "::endgroup::"
             echo "::error::xhostd deploy $deploy_id ended '$status', not 'success'."
             exit 1
           fi

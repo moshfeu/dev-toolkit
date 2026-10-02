@@ -80,8 +80,12 @@ Facts the design rests on (from https://docs.xhostd.com/llms-full.txt and
 6. **Wait.** Poll `.../logs?deploy={id}&max_bytes=1` every 10 s until the
    status is no longer `queued`/`running`. 5 failed polls in a row, or the
    deadline, end the step.
-7. **Report.** Job summary; anything other than `success` prints the build-log
-   tail in a group and fails the job.
+7. **Report.** An `EXIT` trap, installed once the target is known, runs on every
+   exit path: it sets the `status` output (the deploy's terminal status, or
+   `timeout` / `error` if we gave up on it, or `not-started` if no deploy was
+   ours yet), writes the job summary, and for a deploy that didn't succeed
+   prints the build-log tail in a group. The job fails on anything other than
+   `success`, keeping its exit code.
 
 ### Setup (per consumer repo)
 
@@ -133,8 +137,19 @@ see "What we tried first".
   need xhostd to reject a deploy on a busy channel in a way we could rely on.
 - **Shared timeout budget.** The 15 minutes cover time spent waiting on someone
   else's deploy as well as our own.
-- **No summary on timeout.** On a timeout the job summary isn't written and the
-  `status` output stays unset (`deploy-id` is set).
+
+### Part 3: summary and `status` on timeout
+
+A timeout called `exit 1` from inside the polling loop, which skipped the
+job summary and the `status` output (both were written after the loop).
+Not a deliberate choice, just an unhandled path. Fixed by moving both into an
+`EXIT` trap, so they're written on every exit path. New `status` values for
+the cases where no terminal status exists: `timeout`, `error` (gave up on
+flaky status polls, or an API error after a deploy started) and `not-started`
+(failed or timed out before our deploy began). Checked against a mock for
+success, `failed`, timeout on our deploy, timeout while waiting on someone
+else's deploy, repeated poll failures, and a refused deploy POST: the exit
+code is unchanged in each.
 
 ## Status
 
@@ -147,6 +162,5 @@ been exercised only against a local mock of the xhostd API, so the first real
 ## Possible follow-ups (not required, not yet done)
 
 - Optional `environment` input for an approval gate / branch restriction.
-- Write the job summary and `status` output on timeout too.
 - Give the "wait for an in-flight deploy" phase its own budget.
 - Tag releases (`v1.1.0`) so consumers can pin `@v1` instead of `@main`.

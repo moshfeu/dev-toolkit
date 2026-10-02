@@ -74,7 +74,10 @@ jobs:
 | `sha` | none | 40-char commit SHA. Wins over `ref`; pass `workflow_run.head_sha` to ship exactly the commit CI validated rather than whatever the branch points at by then. |
 | `timeout-minutes` | `15` | How long to poll for a terminal status before failing. |
 
-Outputs: `deploy-id` and `status` (`success` or `failed`).
+Outputs: `deploy-id` (empty if no deploy was started) and `status`: the deploy's
+terminal status (`success`, `failed`, ...), `timeout` or `error` if the workflow
+gave up on it, or `not-started`. The `status` output and the job summary are
+written on every exit path, including a timeout.
 
 **Secret `XHOSTD_TOKEN`** (required): an xhostd API token (`xh_...`) with the
 `deploy:*` scope. Mint one at
