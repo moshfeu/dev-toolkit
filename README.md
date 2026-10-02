@@ -32,6 +32,72 @@ Two jobs on purpose: `check` runs a script from the PR branch, so it only
 gets a read-only token; `bump` holds the write token but runs only fixed
 commands, never code from the PR.
 
+### `.github/workflows/deploy-xhostd.yml` — reusable deploy workflow
+
+Deploys an app to [xhostd](https://docs.xhostd.com) and waits for the result.
+It uses xhostd's documented HTTP API (`https://api.xhostd.com`, bearer auth):
+it looks the app and channel up by name, triggers
+`POST /apps/{id}/channels/{cid}/deploy`, then polls
+`GET /apps/{id}/channels/{cid}/logs?deploy={id}` until `status` is `success`
+or `failed`. The job fails on `failed`, on a poll timeout, or on repeated API
+errors, and prints the build-log tail when a deploy fails.
+
+Call it from a consumer repo so it only runs after CI succeeded on a push to
+the default branch (`workflows:` must name the repo's CI workflow, and
+`branches:` its default branch):
+
+```yaml
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [ CI ]
+    types: [ completed ]
+    branches: [ main ]
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+    uses: moshfeu/dev-toolkit/.github/workflows/deploy-xhostd.yml@main
+    with:
+      app: my-app
+      sha: ${{ github.event.workflow_run.head_sha }}
+    secrets:
+      XHOSTD_TOKEN: ${{ secrets.XHOSTD_TOKEN }}
+```
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `app` (required) | | xhostd app name, as shown by `list_apps`. |
+| `channel` | `prod` | Channel to deploy. |
+| `ref` | the pushed branch (`workflow_run.head_branch`, else the caller's `github.ref_name`) | Branch to deploy; xhostd resolves it to the branch's HEAD. |
+| `sha` | none | 40-char commit SHA. Wins over `ref`; pass `workflow_run.head_sha` to ship exactly the commit CI validated rather than whatever the branch points at by then. |
+| `timeout-minutes` | `15` | How long to poll for a terminal status before failing. |
+
+Outputs: `deploy-id` and `status` (`success` or `failed`).
+
+**Secret `XHOSTD_TOKEN`** (required): an xhostd API token (`xh_...`) with the
+`deploy:*` scope. Mint one at
+<https://console.xhostd.com/tokens?label=github-actions> (shown once), then add
+it in each consumer repo under *Settings → Secrets and variables → Actions →
+New repository secret*, name `XHOSTD_TOKEN`. xhostd answers 401 once a token is
+revoked or expired; re-mint it at the same URL and update the secret.
+
+Behaviour worth knowing:
+
+- If a deploy is already queued or running on the channel (xhostd's
+  `pending_deploy`), no second one is started: the workflow logs a warning and
+  follows the in-flight deploy to its end instead.
+- Runs for the same app and channel are serialised (`concurrency`, no
+  cancel), so a newer merge queues behind a build that's in progress.
+- GitHub-connected xhostd apps re-sync from GitHub on each deploy, so the
+  `ref`/`sha` only needs to exist on GitHub, not be pushed to xhostd.
+- `workflow_run` workflows only run from the default branch's copy of the
+  caller file, and only fire for the CI workflow's *completed* runs: a CI
+  workflow that ends in `startup_failure` (e.g. a nested reusable workflow
+  asking for more `permissions` than the caller grants) never triggers a
+  deploy.
+
 ### `eslint-config/` — `@moshfeu/eslint-config`
 
 A shared flat ESLint config (typescript-eslint `recommended` plus an
