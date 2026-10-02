@@ -108,51 +108,76 @@ jobs:
             exit 1
           fi
           app_id=$(jq -r '.[0].id' <<<"$match")
-          channel_id=$(jq -r --arg c "$CHANNEL" '.[0].channels[] | select(.name == $c) | .id' <<<"$match")
+          channel_id=$(jq -r --arg c "$CHANNEL" '(.[0].channels // [])[] | select(.name == $c) | .id' <<<"$match")
           if [ -z "$channel_id" ]; then
             echo "::error::App '$APP' has no channel named '$CHANNEL'."
             exit 1
           fi
           base="apps/$app_id/channels/$channel_id"
 
+          deadline=$(( $(date +%s) + TIMEOUT_MINUTES * 60 ))
+          check_deadline() {
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::Timed out after $TIMEOUT_MINUTES min ($1). Any deploy already started keeps running on xhostd; check it with get_deploy_log."
+              exit 1
+            fi
+          }
+
+          # wait_for DEPLOY_ID -> sets $status once the deploy is no longer
+          # queued/running. Reads the outcome from `status`, never from the
+          # log text. A transient API error just retries on the next tick.
+          wait_for() {
+            local id=$1 resp errors=0
+            while :; do
+              if resp=$(call GET "$base/logs?deploy=$id&max_bytes=1"); then
+                errors=0
+                status=$(jq -r '.status // "unknown"' <<<"$resp")
+                echo "deploy $id: $status"
+                case $status in queued | running) ;; *) return 0 ;; esac
+              else
+                errors=$((errors + 1))
+                if [ "$errors" -ge 5 ]; then
+                  echo "::error::Giving up after $errors consecutive status-poll failures."
+                  exit 1
+                fi
+              fi
+              check_deadline "deploy $id still '${status:-unknown}'"
+              sleep "$POLL_INTERVAL"
+            done
+          }
+
           target=${SHA:-$REF}
-          pending=$(call GET "$base" | jq -c '.pending_deploy')
-          if [ "$pending" != null ]; then
-            # Never start a second deploy on top of one in flight: follow it.
-            deploy_id=$(jq -r '.deploy_id' <<<"$pending")
+          deploy_id=
+          status=
+          # Never start a second deploy while one is in flight. If it is the
+          # very commit we want, follow it; otherwise wait for it to finish
+          # and then deploy ours, so the newer commit still ships.
+          while :; do
+            pending=$(call GET "$base" | jq -c '.pending_deploy')
+            [ "$pending" = null ] && break
+            pending_id=$(jq -r '.deploy_id' <<<"$pending")
             pending_sha=$(jq -r '.sha' <<<"$pending")
-            echo "::warning::A deploy ($deploy_id, sha $pending_sha) is already in flight on $APP/$CHANNEL; following it instead of starting another for '$target'."
-          else
+            if [ -n "$SHA" ] && [ "$pending_sha" = "$SHA" ]; then
+              echo "::notice::Deploy $pending_id of $SHA is already in flight on $APP/$CHANNEL; following it."
+              deploy_id=$pending_id
+              break
+            fi
+            echo "::warning::Deploy $pending_id (sha $pending_sha) is in flight on $APP/$CHANNEL; waiting for it to finish before deploying '$target'."
+            wait_for "$pending_id"
+            if [ "$status" != success ]; then
+              echo "::warning::The in-flight deploy $pending_id ended '$status'; continuing with ours."
+            fi
+            check_deadline "waiting for in-flight deploy $pending_id"
+            sleep "$POLL_INTERVAL"
+          done
+          if [ -z "$deploy_id" ]; then
             if [ -n "$SHA" ]; then body=$(jq -nc --arg v "$SHA" '{sha: $v}'); else body=$(jq -nc --arg v "$REF" '{ref: $v}'); fi
             deploy_id=$(call POST "$base/deploy" "$body" | jq -r '.deploy_id')
             echo "Started deploy $deploy_id of '$target' to $APP/$CHANNEL"
           fi
           echo "deploy_id=$deploy_id" >>"$GITHUB_OUTPUT"
 
-          deadline=$(( $(date +%s) + TIMEOUT_MINUTES * 60 ))
-          status=queued
-          errors=0
-          while :; do
-            # Read the outcome from `status`, never from the log text. A
-            # transient API error just retries on the next tick.
-            if resp=$(call GET "$base/logs?deploy=$deploy_id&max_bytes=1"); then
-              errors=0
-              status=$(jq -r '.status' <<<"$resp")
-              echo "deploy $deploy_id: $status"
-              case $status in success | failed) break ;; esac
-            else
-              errors=$((errors + 1))
-              if [ "$errors" -ge 5 ]; then
-                echo "::error::Giving up after $errors consecutive status-poll failures."
-                exit 1
-              fi
-            fi
-            if [ "$(date +%s)" -ge "$deadline" ]; then
-              echo "::error::Timed out after $TIMEOUT_MINUTES min; deploy $deploy_id was still '$status'. It keeps running on xhostd; check it with get_deploy_log."
-              exit 1
-            fi
-            sleep "$POLL_INTERVAL"
-          done
+          wait_for "$deploy_id"
           echo "status=$status" >>"$GITHUB_OUTPUT"
 
           {
@@ -162,10 +187,10 @@ jobs:
             echo "- status: **$status**"
           } >>"$GITHUB_STEP_SUMMARY"
 
-          if [ "$status" = failed ]; then
+          if [ "$status" != success ]; then
             echo "::group::Last 16 KiB of the build log"
             call GET "$base/logs?deploy=$deploy_id" | jq -r '.log' || true
             echo "::endgroup::"
-            echo "::error::xhostd deploy $deploy_id failed."
+            echo "::error::xhostd deploy $deploy_id ended '$status', not 'success'."
             exit 1
           fi

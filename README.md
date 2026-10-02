@@ -85,9 +85,11 @@ revoked or expired; re-mint it at the same URL and update the secret.
 
 Behaviour worth knowing:
 
-- If a deploy is already queued or running on the channel (xhostd's
-  `pending_deploy`), no second one is started: the workflow logs a warning and
-  follows the in-flight deploy to its end instead.
+- A second deploy is never started while one is queued or running on the
+  channel (xhostd's `pending_deploy`). If that deploy is the same `sha`, the
+  workflow follows it; otherwise it waits for it to finish and then deploys
+  its own target, so a newer commit is never silently skipped. Any status
+  other than `success` (including an unexpected one) fails the job.
 - Runs for the same app and channel are serialised (`concurrency`, no
   cancel), so a newer merge queues behind a build that's in progress.
 - GitHub-connected xhostd apps re-sync from GitHub on each deploy, so the
