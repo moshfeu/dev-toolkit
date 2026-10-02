@@ -165,7 +165,7 @@ Copies `docs/` from `node_modules/dev-toolkit` into the consumer repo's own
 every full `npm install` without crashing a prod-only one:
 
 ```json
-{ "scripts": { "postinstall": "test -f node_modules/dev-toolkit/scripts/sync-docs.js && node node_modules/dev-toolkit/scripts/sync-docs.js || true", "sync-docs": "node node_modules/dev-toolkit/scripts/sync-docs.js" } }
+{ "scripts": { "postinstall": "node -e \"import('./node_modules/dev-toolkit/scripts/sync-docs.js').catch(()=>{})\"", "sync-docs": "node node_modules/dev-toolkit/scripts/sync-docs.js" } }
 ```
 
 See `docs/local-sync.md` for why this needs to be paired with a `SessionStart`
