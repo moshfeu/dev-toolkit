@@ -1,0 +1,218 @@
+name: Deploy to xhostd
+
+# See the "deploy-xhostd.yml" section in this repo's README.md.
+on:
+  workflow_call:
+    inputs:
+      app:
+        description: xhostd app name (as shown by `list_apps`).
+        type: string
+        required: true
+      channel:
+        description: xhostd channel name to deploy.
+        type: string
+        default: prod
+      ref:
+        description: >-
+          Branch to deploy. Defaults to the branch the CI run was pushed to
+          (`workflow_run.head_branch`), else the caller's own branch.
+        type: string
+        default: ''
+      sha:
+        description: >-
+          Optional 40-char commit SHA. When set it wins over `ref`, so the
+          deploy ships exactly the commit CI validated, not whatever the
+          branch points at by the time the deploy starts.
+        type: string
+        default: ''
+      timeout-minutes:
+        description: How long to poll for a terminal deploy status before failing.
+        type: number
+        default: 15
+    secrets:
+      XHOSTD_TOKEN:
+        description: >-
+          xhostd API token (`xh_...`, needs the `deploy:*` scope). Mint one at
+          https://console.xhostd.com/tokens?label=github-actions.
+        required: true
+    outputs:
+      deploy-id:
+        description: The xhostd deploy that was followed (new, or the one already in flight).
+        value: ${{ jobs.deploy.outputs.deploy-id }}
+      status:
+        description: >-
+          Outcome: the deploy's terminal status (`success`, `failed`, ...), or
+          `timeout` / `error` if the workflow gave up on it, or `not-started` if
+          it never got to start one.
+        value: ${{ jobs.deploy.outputs.status }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Hard ceiling; the polling budget is the `timeout-minutes` input.
+    timeout-minutes: 60
+    permissions: {}
+    # Serialise deploys of one channel; a newer merge queues behind the
+    # running one instead of cancelling a deploy half-way through its build.
+    concurrency:
+      group: deploy-xhostd-${{ inputs.app }}-${{ inputs.channel }}
+      cancel-in-progress: false
+    outputs:
+      deploy-id: ${{ steps.deploy.outputs.deploy_id }}
+      status: ${{ steps.deploy.outputs.status }}
+    steps:
+      - name: Deploy and wait for a terminal status
+        id: deploy
+        # Everything caller- or event-supplied goes through `env`, never
+        # straight into the script, so a branch name can't inject shell.
+        env:
+          XHOST_TOKEN: ${{ secrets.XHOSTD_TOKEN }}
+          APP: ${{ inputs.app }}
+          CHANNEL: ${{ inputs.channel }}
+          REF: ${{ inputs.ref || github.event.workflow_run.head_branch || github.ref_name }}
+          SHA: ${{ inputs.sha }}
+          TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+        run: |
+          set -euo pipefail
+          API=${XHOST_API_URL:-https://api.xhostd.com}
+          POLL_INTERVAL=10
+
+          if [ -z "$XHOST_TOKEN" ]; then
+            echo "::error::XHOSTD_TOKEN secret is empty or not passed to this workflow. Mint a token at https://console.xhostd.com/tokens?label=github-actions and add it as a repo secret named XHOSTD_TOKEN."
+            exit 1
+          fi
+          if [ -n "$SHA" ] && ! printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::sha must be a 40-char lowercase hex commit SHA, got '$SHA'"
+            exit 1
+          fi
+
+          # call METHOD PATH [JSON_BODY] -> response body on stdout. Only GETs
+          # are retried: re-sending the deploy POST could queue a second deploy.
+          call() {
+            local method=$1 path=$2 body=${3:-} out code opts=()
+            out=$(mktemp)
+            if [ "$method" = GET ]; then opts+=(--retry 3 --retry-all-errors); fi
+            if [ -n "$body" ]; then opts+=(-H 'Content-Type: application/json' -d "$body"); fi
+            code=$(curl -sS -o "$out" -w '%{http_code}' --max-time 30 "${opts[@]}" \
+              -X "$method" -H "Authorization: Bearer $XHOST_TOKEN" "$API/$path") || code=000
+            case $code in
+              2??) cat "$out" ;;
+              *)
+                echo "::error::xhostd $method /$path failed (HTTP $code): $(jq -r '.error.message // empty' "$out" 2>/dev/null || true)" >&2
+                return 1
+                ;;
+            esac
+          }
+
+          apps=$(call GET apps)
+          match=$(jq -c --arg n "$APP" '[.apps[] | select(.name == $n)]' <<<"$apps")
+          if [ "$(jq length <<<"$match")" != 1 ]; then
+            echo "::error::Expected exactly one xhostd app named '$APP', found $(jq length <<<"$match")."
+            exit 1
+          fi
+          app_id=$(jq -r '.[0].id' <<<"$match")
+          channel_id=$(jq -r --arg c "$CHANNEL" '(.[0].channels // [])[] | select(.name == $c) | .id' <<<"$match")
+          if [ -z "$channel_id" ]; then
+            echo "::error::App '$APP' has no channel named '$CHANNEL'."
+            exit 1
+          fi
+          base="apps/$app_id/channels/$channel_id"
+
+          deadline=$(( $(date +%s) + TIMEOUT_MINUTES * 60 ))
+          check_deadline() {
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              outcome=timeout
+              echo "::error::Timed out after $TIMEOUT_MINUTES min ($1). Any deploy already started keeps running on xhostd; check it with get_deploy_log."
+              exit 1
+            fi
+          }
+
+          # wait_for DEPLOY_ID -> sets $status once the deploy is no longer
+          # queued/running. Reads the outcome from `status`, never from the
+          # log text. A transient API error just retries on the next tick.
+          wait_for() {
+            local id=$1 resp errors=0
+            while :; do
+              if resp=$(call GET "$base/logs?deploy=$id&max_bytes=1"); then
+                errors=0
+                status=$(jq -r '.status // "unknown"' <<<"$resp")
+                echo "deploy $id: $status"
+                case $status in queued | running) ;; *) return 0 ;; esac
+              else
+                errors=$((errors + 1))
+                if [ "$errors" -ge 5 ]; then
+                  echo "::error::Giving up after $errors consecutive status-poll failures."
+                  exit 1
+                fi
+              fi
+              check_deadline "deploy $id still '${status:-unknown}'"
+              sleep "$POLL_INTERVAL"
+            done
+          }
+
+          target=${SHA:-$REF}
+          deploy_id=
+          status=
+          outcome=
+
+          # Runs on every exit once a target is known (success, failure,
+          # timeout, giving up on the API): always sets the `status` output
+          # and writes the job summary, and shows the build-log tail for a
+          # deploy that didn't succeed.
+          finish() {
+            local rc=$?
+            trap - EXIT
+            if [ -z "$deploy_id" ]; then
+              status=not-started
+            else
+              case $status in queued | running | '') status=${outcome:-error} ;; esac
+            fi
+            echo "status=$status" >>"$GITHUB_OUTPUT"
+            {
+              echo "### xhostd deploy: \`$APP\` / \`$CHANNEL\`"
+              echo "- target: \`$target\`"
+              echo "- deploy id: \`${deploy_id:-none}\`"
+              echo "- status: **$status**"
+            } >>"$GITHUB_STEP_SUMMARY"
+            if [ -n "$deploy_id" ] && [ "$status" != success ]; then
+              echo "::group::Last 16 KiB of the build log"
+              call GET "$base/logs?deploy=$deploy_id" | jq -r '.log' || true
+              echo "::endgroup::"
+            fi
+            exit "$rc"
+          }
+          trap finish EXIT
+
+          # Never start a second deploy while one is in flight. If it is the
+          # very commit we want, follow it; otherwise wait for it to finish
+          # and then deploy ours, so the newer commit still ships.
+          while :; do
+            pending=$(call GET "$base" | jq -c '.pending_deploy')
+            [ "$pending" = null ] && break
+            pending_id=$(jq -r '.deploy_id' <<<"$pending")
+            pending_sha=$(jq -r '.sha' <<<"$pending")
+            if [ -n "$SHA" ] && [ "$pending_sha" = "$SHA" ]; then
+              echo "::notice::Deploy $pending_id of $SHA is already in flight on $APP/$CHANNEL; following it."
+              deploy_id=$pending_id
+              break
+            fi
+            echo "::warning::Deploy $pending_id (sha $pending_sha) is in flight on $APP/$CHANNEL; waiting for it to finish before deploying '$target'."
+            wait_for "$pending_id"
+            if [ "$status" != success ]; then
+              echo "::warning::The in-flight deploy $pending_id ended '$status'; continuing with ours."
+            fi
+            check_deadline "waiting for in-flight deploy $pending_id"
+            sleep "$POLL_INTERVAL"
+          done
+          if [ -z "$deploy_id" ]; then
+            if [ -n "$SHA" ]; then body=$(jq -nc --arg v "$SHA" '{sha: $v}'); else body=$(jq -nc --arg v "$REF" '{ref: $v}'); fi
+            deploy_id=$(call POST "$base/deploy" "$body" | jq -r '.deploy_id')
+            echo "Started deploy $deploy_id of '$target' to $APP/$CHANNEL"
+          fi
+          echo "deploy_id=$deploy_id" >>"$GITHUB_OUTPUT"
+
+          wait_for "$deploy_id"
+          if [ "$status" != success ]; then
+            echo "::error::xhostd deploy $deploy_id ended '$status', not 'success'."
+            exit 1
+          fi
