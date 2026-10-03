@@ -9,12 +9,6 @@ workflows via `uses: ...@main`, plus the shared ESLint/tsconfig packages and
 the `code-standards` plugin), so a regression here lands in every consumer.
 Note the version a consumer started failing on when reporting a problem.
 
-## [1.1.2] - 2026-10-03
-
-### Fixed
-
-- README: documented that a caller of `release-metadata.yml` must grant `permissions: contents: write`. Without it the shared workflow's `bump` job asks for more than the caller allows and the run fails at startup (`startup_failure`), which `my-openclaw` hit on every PR.
-
 ## [1.1.1] - 2026-10-03
 
 ### Changed
