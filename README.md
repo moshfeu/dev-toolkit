@@ -28,6 +28,19 @@ triggered by `pull_request`). The consumer repo needs a `CHANGELOG.md` with
 See `docs/changelog-source-of-truth.md` for the full convention. Label a PR
 `skip-release` to opt out (docs-only, CI-only changes).
 
+The calling job must also grant `permissions: contents: write`, because the
+`bump` job pushes the version bump to the PR branch. A called workflow can't
+get more than its caller grants, so without it the run fails at startup
+(`startup_failure`, no jobs listed) and never reaches the check:
+
+```yaml
+jobs:
+  release-metadata:
+    permissions:
+      contents: write
+    uses: moshfeu/dev-toolkit/.github/workflows/release-metadata.yml@main
+```
+
 Two jobs on purpose: `check` runs a script from the PR branch, so it only
 gets a read-only token; `bump` holds the write token but runs only fixed
 commands, never code from the PR.
