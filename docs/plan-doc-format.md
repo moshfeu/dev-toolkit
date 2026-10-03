@@ -37,6 +37,15 @@ _Created: <date> · Updated: <date>_
    backlog scoped to this feature, distinct from the repo's general
    tech-debt register (see `tech-debt-register-pattern.md`).
 
+## Length and tone
+
+There is no fixed length: a plan is as long as the feature needs and no
+longer. Prefer fewer sections and fewer words, but never at the cost of
+readability. The section list above is a menu, not a checklist -- leave out
+any section that has nothing to say. Use plain English: no jargon, no fancy
+wording, no filler. A reader who hasn't followed the discussion should
+understand the plan on one read.
+
 ## The "accepted, unfixed" pattern
 
 When a reviewer (human, bot, or another agent) raises a real finding that
