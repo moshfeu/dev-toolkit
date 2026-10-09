@@ -163,6 +163,7 @@ that repos link to rather than duplicate:
 - `pre-pr-self-review-checklist.md`
 - `comments-philosophy.md`
 - `pr-review-automation.md` — every consumer repo's agents must follow this one: subscribe to a PR's review activity right after opening it, in every repo, not just on request.
+- `ask-to-watch-deploy-after-merge.md` — every consumer repo's agents must follow this one: after a PR is merged, ask the user once whether to watch the deploy and report when it is done.
 - `local-sync.md` — every consumer repo must follow this one too: wire up `scripts/sync-docs.js` (below) and a synchronous `SessionStart` hook, and link `AGENTS.md` at the local synced path, not a GitHub URL.
 
 A consuming repo's own `AGENTS.md`/`CLAUDE.md` should link to the relevant
