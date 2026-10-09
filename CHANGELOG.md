@@ -9,6 +9,12 @@ workflows via `uses: ...@main`, plus the shared ESLint/tsconfig packages and
 the `code-standards` plugin), so a regression here lands in every consumer.
 Note the version a consumer started failing on when reporting a problem.
 
+## [1.2.0] - 2026-10-09
+
+### Added
+
+- `docs/ask-to-watch-deploy-after-merge.md`: a convention every consumer repo's agents follow. When a PR they opened or drove is merged, they ask the user once whether to watch the deployment and report when it finishes (the user usually merges to test on the real deployment). On yes they follow the repo's deploy path and report success or the failure reason; on no they stop; if nothing deploys on merge they skip the question. Listed in the README next to the other process conventions.
+
 ## [1.1.1] - 2026-10-03
 
 ### Changed
