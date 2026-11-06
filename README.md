@@ -164,6 +164,7 @@ that repos link to rather than duplicate:
 - `comments-philosophy.md`
 - `pr-review-automation.md` — every consumer repo's agents must follow this one: subscribe to a PR's review activity right after opening it, in every repo, not just on request.
 - `ask-to-watch-deploy-after-merge.md` — every consumer repo's agents must follow this one: after a PR is merged, ask the user once whether to watch the deploy and report when it is done.
+- `review-rules.md` — the checks every review (human or `/code-review`) applies in every repo: closed sets as unions, the source of external literals, one constant per repeated literal, and how a new capability is turned on. A consumer's `REVIEW.md` links it and adds repo-specific rules.
 - `local-sync.md` — every consumer repo must follow this one too: wire up `scripts/sync-docs.js` (below) and a synchronous `SessionStart` hook, and link `AGENTS.md` at the local synced path, not a GitHub URL.
 
 A consuming repo's own `AGENTS.md`/`CLAUDE.md` should link to the relevant

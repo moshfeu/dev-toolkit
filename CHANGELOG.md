@@ -9,6 +9,12 @@ workflows via `uses: ...@main`, plus the shared ESLint/tsconfig packages and
 the `code-standards` plugin), so a regression here lands in every consumer.
 Note the version a consumer started failing on when reporting a problem.
 
+## [1.3.0] - 2026-11-06
+
+### Added
+
+- `docs/review-rules.md`: the checks every review applies in every repo, taken from review comments on `my-openclaw` PR #116. A closed set of values is a literal union, not `string`. A literal copied from an external API says where it comes from and whether a model or API change can break it. A literal written in two places is one constant. A new capability names the exact control that turns it on. A consumer repo links it from a `REVIEW.md` and adds only its own rules there. Listed in the README next to the other process conventions.
+
 ## [1.2.0] - 2026-10-09
 
 ### Added
