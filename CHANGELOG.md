@@ -9,6 +9,12 @@ workflows via `uses: ...@main`, plus the shared ESLint/tsconfig packages and
 the `code-standards` plugin), so a regression here lands in every consumer.
 Note the version a consumer started failing on when reporting a problem.
 
+## [1.5.0] - 2026-11-07
+
+### Added
+
+- `deploy-xhostd.yml`: the `notify` push now carries the version and the commits. The title is `<app> v<version> deploy: <status>`, with `version` read from `package.json` at the deployed commit through the contents API (no checkout; left out when the repo has none). The body lists the deployed commit and the first line of each commit since the one the channel was running before, capped at 10 with a "...and N more" line. To know that commit, the `deploy` job now reads the channel's `current_sha` from xhostd's app list right before it starts (or follows) a deploy and exposes it as the new `previous-sha` output; the `notify` job then asks the compare API for the range. Asked for by the owner for `travel-tracker` and `my-openclaw`, which both use this workflow. The notify job now has `permissions: contents: read` for those two calls (the repo default token already has it). A missing `previous-sha`, a failed compare or a missing `package.json` only shortens the message ("Commit list unavailable.", no version); none of them fails the run. The `current_sha` field is read from the same app list the job already uses to find the app and channel ids, and was not verified against a live token when this shipped: if xhostd names it differently the list is simply absent.
+
 ## [1.4.0] - 2026-11-07
 
 ### Added
