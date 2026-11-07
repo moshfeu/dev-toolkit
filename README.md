@@ -99,6 +99,14 @@ it in each consumer repo under *Settings → Secrets and variables → Actions �
 New repository secret*, name `XHOSTD_TOKEN`. xhostd answers 401 once a token is
 revoked or expired; re-mint it at the same URL and update the secret.
 
+**Secret `NTFY_TOPIC`** (optional): an [ntfy.sh](https://ntfy.sh) topic. When
+the caller passes it (`NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}`), a `notify` job
+sends a push with the deploy result (`success`, `failed`, `timeout`, ...) and a
+link to the run once the deploy ends, on failure too. Subscribe to the topic in
+the ntfy app. The topic name is the only access control on ntfy.sh, so store it
+as a secret, never in the repo. Without it the job does nothing. A failed send
+only logs a warning; it never fails the run.
+
 Behaviour worth knowing:
 
 - A second deploy is never started while one is queued or running on the
