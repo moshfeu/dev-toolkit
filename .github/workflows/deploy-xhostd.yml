@@ -35,6 +35,12 @@ on:
           xhostd API token (`xh_...`, needs the `deploy:*` scope). Mint one at
           https://console.xhostd.com/tokens?label=github-actions.
         required: true
+      NTFY_TOPIC:
+        description: >-
+          Optional ntfy.sh topic. When set, a push notification with the deploy
+          result is sent after the deploy finishes. The topic name is the only
+          access control on ntfy.sh, so keep it secret.
+        required: false
     outputs:
       deploy-id:
         description: The xhostd deploy that was followed (new, or the one already in flight).
@@ -216,3 +222,38 @@ jobs:
             echo "::error::xhostd deploy $deploy_id ended '$status', not 'success'."
             exit 1
           fi
+
+  # Optional push notification (ntfy.sh) once the deploy job has ended, on
+  # success and on failure alike. Never fails the run: a notification outage
+  # must not turn a good deploy red.
+  notify:
+    needs: deploy
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Send ntfy notification
+        # Everything caller- or event-supplied goes through `env`, never
+        # straight into the script.
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          APP: ${{ inputs.app }}
+          CHANNEL: ${{ inputs.channel }}
+          STATUS: ${{ needs.deploy.outputs.status || needs.deploy.result }}
+          RESULT: ${{ needs.deploy.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TARGET: ${{ inputs.sha || inputs.ref || github.event.workflow_run.head_branch || github.ref_name }}
+        run: |
+          if [ -z "$NTFY_TOPIC" ]; then
+            echo "No NTFY_TOPIC secret passed; skipping the notification."
+            exit 0
+          fi
+          if [ "$RESULT" = success ]; then priority=default; tags=white_check_mark; else priority=high; tags=x; fi
+          curl -sS --fail --max-time 15 --retry 2 \
+            -H "Title: $APP deploy: $STATUS" \
+            -H "Priority: $priority" \
+            -H "Tags: $tags" \
+            -H "Click: $RUN_URL" \
+            -d "$APP/$CHANNEL ${TARGET:0:7}" \
+            "https://ntfy.sh/$NTFY_TOPIC" >/dev/null \
+            || echo "::warning::Could not send the ntfy notification."

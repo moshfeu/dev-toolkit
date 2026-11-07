@@ -9,6 +9,12 @@ workflows via `uses: ...@main`, plus the shared ESLint/tsconfig packages and
 the `code-standards` plugin), so a regression here lands in every consumer.
 Note the version a consumer started failing on when reporting a problem.
 
+## [1.4.0] - 2026-11-07
+
+### Added
+
+- `deploy-xhostd.yml`: optional `NTFY_TOPIC` secret. When a caller passes it, a new `notify` job sends an [ntfy.sh](https://ntfy.sh) push with the deploy result (`success`, `failed`, `timeout`, ...) and a link to the run once the `deploy` job ends, on failure too (high priority). It was first written as a job in `travel-tracker`'s own `deploy.yml` and moved here so every consumer gets it by passing one secret. The topic and run values go through `env`, not into the script. A failed send logs a warning and never fails the run, so a notification outage can't turn a good deploy red. Without the secret the job skips. Documented in the README under the deploy workflow.
+
 ## [1.3.0] - 2026-11-06
 
 ### Added
