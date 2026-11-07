@@ -87,9 +87,10 @@ jobs:
 | `sha` | none | 40-char commit SHA. Wins over `ref`; pass `workflow_run.head_sha` to ship exactly the commit CI validated rather than whatever the branch points at by then. |
 | `timeout-minutes` | `15` | How long to poll for a terminal status before failing. |
 
-Outputs: `deploy-id` (empty if no deploy was started) and `status`: the deploy's
-terminal status (`success`, `failed`, ...), `timeout` or `error` if the workflow
-gave up on it, or `not-started`. The `status` output and the job summary are
+Outputs: `deploy-id` (empty if no deploy was started), `previous-sha` (the commit
+the channel was running just before this deploy; empty if xhostd didn't report
+one) and `status`: the deploy's terminal status (`success`, `failed`, ...),
+`timeout` or `error` if the workflow gave up on it, or `not-started`. The `status` output and the job summary are
 written on every exit path, including a timeout.
 
 **Secret `XHOSTD_TOKEN`** (required): an xhostd API token (`xh_...`) with the
@@ -101,11 +102,17 @@ revoked or expired; re-mint it at the same URL and update the secret.
 
 **Secret `NTFY_TOPIC`** (optional): an [ntfy.sh](https://ntfy.sh) topic. When
 the caller passes it (`NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}`), a `notify` job
-sends a push with the deploy result (`success`, `failed`, `timeout`, ...) and a
-link to the run once the deploy ends, on failure too. Subscribe to the topic in
-the ntfy app. The topic name is the only access control on ntfy.sh, so store it
-as a secret, never in the repo. Without it the job does nothing. A failed send
-only logs a warning; it never fails the run.
+sends a push once the deploy ends, on failure too. Subscribe to the topic in
+the ntfy app. The title is `<app> v<version> deploy: <status>` (`success`,
+`failed`, `timeout`, ...; the version is `package.json`'s at the deployed
+commit, left out for a repo without one) and the body lists the deployed
+commit and the first line of each commit since the one the channel was running
+before (`previous-sha`), at most 10. Tapping it opens the workflow run. The job
+only needs `contents: read`, which the repo's default token has. The topic
+name is the only access control on ntfy.sh, so store it as a secret, never in
+the repo. Without it the job does nothing. Nothing in it can fail the run: a
+failed send or an unreadable commit list only logs a warning or shows
+"Commit list unavailable." in the push.
 
 Behaviour worth knowing:
 

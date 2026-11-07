@@ -51,6 +51,11 @@ on:
           `timeout` / `error` if the workflow gave up on it, or `not-started` if
           it never got to start one.
         value: ${{ jobs.deploy.outputs.status }}
+      previous-sha:
+        description: >-
+          The commit the channel was running just before this deploy (empty if
+          xhostd didn't report one). The notification lists the commits since it.
+        value: ${{ jobs.deploy.outputs.previous-sha }}
 
 jobs:
   deploy:
@@ -66,6 +71,7 @@ jobs:
     outputs:
       deploy-id: ${{ steps.deploy.outputs.deploy_id }}
       status: ${{ steps.deploy.outputs.status }}
+      previous-sha: ${{ steps.deploy.outputs.previous_sha }}
     steps:
       - name: Deploy and wait for a terminal status
         id: deploy
@@ -210,6 +216,13 @@ jobs:
             check_deadline "waiting for in-flight deploy $pending_id"
             sleep "$POLL_INTERVAL"
           done
+          # What the channel runs right now, i.e. before this deploy lands, so
+          # the notification can list the commits it brings. Best effort: an
+          # empty value only drops that list.
+          previous_sha=$(call GET apps | jq -r --arg a "$app_id" --arg c "$CHANNEL" \
+            '.apps[] | select(.id == $a) | (.channels // [])[] | select(.name == $c) | .current_sha // empty' || true)
+          echo "previous_sha=$previous_sha" >>"$GITHUB_OUTPUT"
+
           if [ -z "$deploy_id" ]; then
             if [ -n "$SHA" ]; then body=$(jq -nc --arg v "$SHA" '{sha: $v}'); else body=$(jq -nc --arg v "$REF" '{ref: $v}'); fi
             deploy_id=$(call POST "$base/deploy" "$body" | jq -r '.deploy_id')
@@ -224,23 +237,29 @@ jobs:
           fi
 
   # Optional push notification (ntfy.sh) once the deploy job has ended, on
-  # success and on failure alike. Never fails the run: a notification outage
-  # must not turn a good deploy red.
+  # success and on failure alike: app, `package.json` version and the commits
+  # since the previous deploy. Never fails the run: a notification outage or an
+  # unreadable commit list must not turn a good deploy red.
   notify:
     needs: deploy
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    permissions: {}
+    # Read-only token for the compare and contents API calls below.
+    permissions:
+      contents: read
     steps:
       - name: Send ntfy notification
         # Everything caller- or event-supplied goes through `env`, never
         # straight into the script.
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           APP: ${{ inputs.app }}
           CHANNEL: ${{ inputs.channel }}
           STATUS: ${{ needs.deploy.outputs.status || needs.deploy.result }}
           RESULT: ${{ needs.deploy.result }}
+          PREVIOUS_SHA: ${{ needs.deploy.outputs.previous-sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           TARGET: ${{ inputs.sha || inputs.ref || github.event.workflow_run.head_branch || github.ref_name }}
         run: |
@@ -248,12 +267,37 @@ jobs:
             echo "No NTFY_TOPIC secret passed; skipping the notification."
             exit 0
           fi
+
+          # `package.json` version at the deployed commit; none for a repo
+          # without one.
+          version=$(gh api -H 'Accept: application/vnd.github.raw' \
+            "repos/$REPO/contents/package.json?ref=$TARGET" 2>/dev/null \
+            | jq -r '.version // empty' 2>/dev/null || true)
+
+          # First line of each commit between the previous deploy and this one
+          # (newest last, as the compare API returns them), capped at 10.
+          commits=
+          if [ -n "$PREVIOUS_SHA" ]; then
+            if commits=$(gh api "repos/$REPO/compare/$PREVIOUS_SHA...$TARGET" --jq '
+                [.commits[] | "- " + .sha[0:7] + " " + (.commit.message | split("\n")[0])]
+                | (.[0:10] | join("\n")) + (if length > 10 then "\n...and \(length - 10) more" else "" end)' 2>/dev/null); then
+              [ -n "$commits" ] || commits="No new commits since the previous deploy."
+            else
+              commits="Commit list unavailable."
+            fi
+          fi
+
+          short=$TARGET
+          if printf '%s' "$TARGET" | grep -Eq '^[0-9a-f]{40}$'; then short=${TARGET:0:7}; fi
           if [ "$RESULT" = success ]; then priority=default; tags=white_check_mark; else priority=high; tags=x; fi
-          curl -sS --fail --max-time 15 --retry 2 \
-            -H "Title: $APP deploy: $STATUS" \
-            -H "Priority: $priority" \
-            -H "Tags: $tags" \
-            -H "Click: $RUN_URL" \
-            -d "$APP/$CHANNEL ${TARGET:0:7}" \
-            "https://ntfy.sh/$NTFY_TOPIC" >/dev/null \
+
+          { printf '%s/%s %s\n' "$APP" "$CHANNEL" "$short"; [ -z "$commits" ] || printf '%s\n' "$commits"; } \
+            | head -c 3800 \
+            | curl -sS --fail --max-time 15 --retry 2 \
+                -H "Title: $APP${version:+ v$version} deploy: $STATUS" \
+                -H "Priority: $priority" \
+                -H "Tags: $tags" \
+                -H "Click: $RUN_URL" \
+                --data-binary @- \
+                "https://ntfy.sh/$NTFY_TOPIC" >/dev/null \
             || echo "::warning::Could not send the ntfy notification."
