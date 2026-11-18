@@ -1,4 +1,8 @@
 import { test } from 'node:test';
+import { spawnSync } from 'node:child_process';
+import { cpSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { latestChangelogVersion, compareVersions, checkRelease } from './release-metadata.js';
 
@@ -62,4 +66,40 @@ test('checkRelease fails when the changelog has no version heading', () => {
   const result = checkRelease({ changelog: '# Changelog\n', changelogChanged: true, baseVersion: '1.1.0', versions: ['1.1.0', '1.1.0', '1.1.0'] });
   assert.match(result.errors[0]!, /no `## \[x\.y\.z\]` version heading/);
   assert.equal(result.target, null);
+});
+
+// The workflow runs the script with plain `node`, from a `.dev-toolkit` folder inside the caller's repo.
+function runLikeTheWorkflow(callerPackageType: 'module' | 'commonjs', baseVersion: string, changelogChanged: string) {
+  const repo = mkdtempSync(join(tmpdir(), 'release-metadata-'));
+  try {
+    const lib = join(repo, '.dev-toolkit/.github/workflows/lib');
+    cpSync(new URL('.', import.meta.url), lib, { recursive: true, filter: (src) => !src.endsWith('.test.ts') });
+    writeFileSync(join(repo, 'package.json'), JSON.stringify({ name: 'caller', type: callerPackageType, version: '1.2.0' }));
+    writeFileSync(join(repo, 'package-lock.json'), JSON.stringify({ version: '1.2.0', packages: { '': { version: '1.2.0' } } }));
+    writeFileSync(join(repo, 'CHANGELOG.md'), '# Changelog\n\n## [1.2.0] - 2026-11-18\n\n- x\n\n## [1.1.0]\n');
+    const output = join(repo, 'out');
+    const run = spawnSync(
+      process.execPath,
+      [join(lib, 'release-metadata.ts'), '--base-version', baseVersion, '--changelog-changed', changelogChanged, '--output', output],
+      { cwd: repo, encoding: 'utf8' },
+    );
+    return { status: run.status, stdout: run.stdout, output: run.status === null ? '' : readFileSync(output, 'utf8') };
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+}
+
+test('the script runs with plain node in a caller repo of either module type', () => {
+  for (const type of ['module', 'commonjs'] as const) {
+    const run = runLikeTheWorkflow(type, '1.1.0', 'true');
+    assert.equal(run.status, 0, `${type}: ${run.stdout}`);
+    assert.match(run.stdout, /Changelog OK: 1\.2\.0/);
+    assert.equal(run.output, 'target=1.2.0\nneeds_bump=false\n');
+  }
+});
+
+test('the script run with plain node fails when the version is not greater', () => {
+  const run = runLikeTheWorkflow('commonjs', '1.2.0', 'false');
+  assert.equal(run.status, 1);
+  assert.match(run.stdout, /::error::CHANGELOG\.md was not modified/);
 });

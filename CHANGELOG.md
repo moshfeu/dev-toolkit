@@ -9,6 +9,12 @@ workflows via `uses: ...@main`, plus the shared ESLint/tsconfig packages and
 the `code-standards` plugin), so a regression here lands in every consumer.
 Note the version a consumer started failing on when reporting a problem.
 
+## [1.5.1] - 2026-11-18
+
+### Changed
+
+- `release-metadata.yml`: the check no longer installs `tsx`. The step `npm install --no-save tsx@^4` ran in the caller's checkout, so npm installed all of the caller's dependencies too: in a `my-openclaw` PR run it added 458 packages and took about 1m46s of a run that is otherwise a few seconds, on every push to every PR. The job now runs the script with plain `node`, which strips TypeScript types itself; the script already uses only syntax that is erased. The script is run from a `.dev-toolkit` folder inside the caller's repo, so Node used the caller's `package.json` to decide whether it is a module, and a caller with `"type": "commonjs"` failed; a new `.github/workflows/lib/package.json` (`"type": "module"`) fixes that for every caller. A new test copies the script into a repo laid out like the workflow's checkout and runs it with plain `node` for a module and a commonjs caller, so a change that needs `tsx` again or loses `lib/package.json` fails here, not in the consumers. Checked on Node 22.23 here; the CI runner's Node 24 is what this repo's own CI runs the test on. Consumers pick this up on their next PR, since they use the workflow at `@main`. **Note for consumers:** a failure of the `release-metadata` check after this version points here.
+
 ## [1.5.0] - 2026-11-07
 
 ### Added

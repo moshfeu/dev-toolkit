@@ -45,14 +45,9 @@ jobs:
           sparse-checkout: |
             .github/workflows/lib
 
-      - name: Install release-metadata's own dependencies (tsx)
-        # This job checks out and runs a script from the *caller* repo's PR
-        # branch with a read-only token, so it never runs the caller repo's
-        # own npm scripts -- it only needs tsx to execute dev-toolkit's own
-        # checked-out lib script below.
-        run: npm install --no-save tsx@^4
-
       - name: Check changelog and version
+        # Node runs the TypeScript script directly (no install step), so it may only use syntax that is
+        # erased to JavaScript. lib/package.json makes it a module whatever the caller's package.json says.
         id: release
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -63,7 +58,7 @@ jobs:
           changed=false
           if git diff --name-only "$base"...HEAD | grep -qx 'CHANGELOG.md'; then changed=true; fi
           base_version=$(git show "$base:package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
-          node --import tsx .dev-toolkit/.github/workflows/lib/release-metadata.ts --base-version "$base_version" --changelog-changed "$changed" --output "$GITHUB_OUTPUT"
+          node .dev-toolkit/.github/workflows/lib/release-metadata.ts --base-version "$base_version" --changelog-changed "$changed" --output "$GITHUB_OUTPUT"
 
       - name: Fork PRs can't be bumped automatically
         if: steps.release.outputs.needs_bump == 'true' && github.event.pull_request.head.repo.fork
