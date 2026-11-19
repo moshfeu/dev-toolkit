@@ -1,0 +1,5 @@
+{
+  "name": "review-fix",
+  "version": "1.0.0",
+  "description": "One command that reviews the whole branch, judges each finding, fixes what is worth fixing, and suggests rule changes that would have prevented them."
+}
