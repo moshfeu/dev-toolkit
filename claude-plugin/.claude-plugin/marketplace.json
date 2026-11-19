@@ -1,11 +1,18 @@
 {
   "name": "moshfeu-dev-toolkit",
-  "owner": { "name": "moshfeu" },
+  "owner": {
+    "name": "moshfeu"
+  },
   "plugins": [
     {
       "name": "code-standards",
       "source": "./plugins/code-standards",
       "description": "Generic comment/test-helper/constant-placement standards, adapted per-repo for logging/PII specifics."
+    },
+    {
+      "name": "review-fix",
+      "source": "./plugins/review-fix",
+      "description": "One command: review the whole branch, judge each finding, fix them, and suggest rule changes that prevent them."
     }
   ]
 }

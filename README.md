@@ -211,6 +211,14 @@ the same name. Add it to a repo's `.claude/settings.json`:
 { "extraKnownMarketplaces": { "moshfeu-dev-toolkit": { "source": { "source": "github", "repo": "moshfeu/dev-toolkit", "path": "claude-plugin" } } }, "enabledPlugins": { "code-standards@moshfeu-dev-toolkit": true } }
 ```
 
+A second plugin, `review-fix`, adds one command, `/review-fix [level] [--auto]`:
+review the whole branch with `/code-review --comment`, judge each finding (fix,
+skip or out of scope, with the reason), fix the worthwhile ones with tests,
+answer and resolve the PR comments, then suggest at most two general
+`AGENTS.md` changes that would have prevented them. It pauses for the owner's
+go-ahead before fixing unless `--auto` is given. Enable it the same way, with
+`"review-fix@moshfeu-dev-toolkit": true` in `enabledPlugins`.
+
 The logging/PII section of the skill is intentionally left as a template —
 adapt it per repo (e.g. naming a real pseudonymization helper) rather than
 copying `my-openclaw`'s jid-specific version verbatim.
