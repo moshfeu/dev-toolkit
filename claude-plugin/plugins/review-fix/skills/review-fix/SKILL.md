@@ -18,7 +18,10 @@ Find the base branch (the PR's base, else the default branch). Run
 `/code-review <level> --comment origin/<base>...HEAD`.
 
 Review the whole branch, not the last commit: a late docs-only commit would
-hide the code. Then check that the comments exist on the PR. If `--comment`
+hide the code. Run it from the repo's own root, then check that the review
+read this repo: its file paths must exist in the checkout. (A review once ran
+against the session's first repo instead of the one just opened; stop and say
+so if the paths do not match.) Then check that the comments exist on the PR. If `--comment`
 posted nothing (no PR yet, or no inline anchor), say so and carry on with the
 findings from the review output.
 
@@ -48,7 +51,8 @@ rule). With `--auto`, continue.
 - Push, then for each PR comment reply with what changed (start with
   `claude:` if the repo asks for it) and resolve the thread. A **Skip** gets a
   reply with the reason. An **Out of scope** gets a reply and stays open for
-  the owner to decide.
+  the owner to decide; also record it where the repo keeps such things (a
+  plan's non-goals with the reason, or an issue), so it is not lost.
 
 ## 5. Suggest rule changes
 
