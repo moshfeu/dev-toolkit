@@ -32,23 +32,33 @@ Both sides use them:
 1. **Review.** Make sure the branch is pushed and a PR is open (open a draft
    PR if none). Run `/code-review --comment` on it. Read the comments it
    posted.
-2. **Triage.** Give every comment one verdict, with a reason:
+2. **Triage in a fresh subagent.** You wrote the code, so you are biased
+   about comments on it. Start a new subagent (a fresh one, not a fork, so it
+   does not inherit your reasoning) and brief it with only what it needs:
+   the PR and branch, the posted comments, the project-rule files to read,
+   the declined list from earlier rounds with reasons, and the PR's scope. Do
+   not give it your arguments for why the code is right. It returns one
+   verdict per comment, with evidence. It verifies and reports; it does not
+   change the PR's files (a repro test it writes is thrown away). Verdicts:
    - **Fix**: it is correct and in scope.
    - **Decline**: it is wrong, already handled, out of scope, or contradicts
      a documented decision or known issue. Name the file or line that shows it.
-   - **Cannot verify**: it may be right but needs something you can't do here
-     (a real device, production data, a service you can't reach). Do not
-     accept it and do not dismiss it. Say exactly what is needed to check it.
-3. **Verify before you decide.** Do not rely on how convincing the comment
-   reads. Check it against the real thing, whichever applies:
-   - read the code it points at and its callers;
+   - **Cannot verify**: it may be right but needs something that can't be done
+     here (a real device, production data, a service that can't be reached).
+     Do not accept it and do not dismiss it. Say exactly what is needed.
+3. **The subagent verifies before it decides.** It does not rely on how
+   convincing a comment reads. It checks against the real thing, whichever
+   applies:
+   - read the code the comment points at and its callers;
    - write or run a test that reproduces the claim;
    - run the project's lint, typecheck and tests;
    - run the app itself (server, CLI, mobile app, UI) and try the case, using
      the `run` skill when it fits.
-   A comment you reproduced is a *fix*. A comment you disproved is a
-   *decline*, and the evidence goes in the reply. If the only way to know is
-   something you can't run, it is *cannot verify*.
+   A comment it reproduced is a *fix*. A comment it disproved is a *decline*,
+   with the evidence. If the only way to know is something it can't run, it is
+   *cannot verify*. You then check each *decline* against the PR's intent,
+   which only you know; if the evidence holds, accept it, otherwise ask the
+   user.
 4. **Fix** every *fix* verdict. One concern per commit. Keep the change as
    narrow as the comment. Run lint, typecheck and tests, push.
 5. **Reply** on each thread: what you changed (with the commit), or why not
