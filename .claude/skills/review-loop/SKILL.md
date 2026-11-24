@@ -1,6 +1,6 @@
 ---
 name: review-loop
-description: "Review the current PR with /code-review --comment, then triage every comment critically, verify the ones that can be verified, fix the valid ones and decline the rest with a reason. Repeats up to 3 rounds or until no new findings. Use when the user asks to review and fix a PR, or runs /review-loop."
+description: "Review the current PR and fix what is valid, up to 3 rounds. Runs /code-review --comment, reads AGENTS.md/CLAUDE.md/REVIEW.md and the other .md files for known issues and design decisions, verifies each comment against the repo (code, tests, running the app) instead of accepting it, fixes the valid ones, declines the rest with evidence, and reports what it could not verify. Use when the user runs /review-loop or asks to review a PR and fix the comments."
 ---
 
 # Review loop
