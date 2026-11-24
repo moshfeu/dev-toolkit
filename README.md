@@ -219,7 +219,9 @@ verify" for what it can't check here. Up to 3 rounds, or until a round brings
 nothing new. Both the reviewer and the fixer read `AGENTS.md`, `CLAUDE.md`,
 `REVIEW.md` and the other `.md` files first, so known issues and design
 decisions aren't re-raised. Enable it with
-`"review-loop@moshfeu-dev-toolkit": true` in `enabledPlugins`.
+`"review-loop@moshfeu-dev-toolkit": true` in `enabledPlugins`. This is the only
+way to get it: attaching this repo to a session (`add_repo`) does not load its
+skills, and a copied `SKILL.md` in the consumer drifts from this one.
 
 The logging/PII section of the skill is intentionally left as a template —
 adapt it per repo (e.g. naming a real pseudonymization helper) rather than
