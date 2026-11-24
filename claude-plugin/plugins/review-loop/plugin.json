@@ -1,0 +1,5 @@
+{
+  "name": "review-loop",
+  "version": "1.0.0",
+  "description": "A /review-loop command: run /code-review --comment on the PR, triage each comment critically (verify, don't blindly accept), fix what holds up, repeat up to 3 rounds."
+}

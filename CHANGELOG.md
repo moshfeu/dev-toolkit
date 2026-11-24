@@ -9,6 +9,12 @@ workflows via `uses: ...@main`, plus the shared ESLint/tsconfig packages and
 the `code-standards` plugin), so a regression here lands in every consumer.
 Note the version a consumer started failing on when reporting a problem.
 
+## [1.6.0] - 2026-11-24
+
+### Added
+
+- `claude-plugin/plugins/review-loop`: a new plugin with a `/review-loop` skill, registered in `marketplace.json`. One round runs `/code-review --comment` on the PR, triages each comment (fix, decline with evidence, or cannot verify), verifies against the repo where it can (read the code, reproduce with a test, run lint/typecheck/tests, run the app), fixes, pushes and replies on each thread. It repeats up to 3 rounds or until a round has no new valid finding. Comments are never accepted on trust, and a comment that needs something unavailable here (a device, production data) is reported as unverified rather than accepted. Before round 1 the reviewer is told to read, and the fixer reads, `AGENTS.md`, `CLAUDE.md`, `REVIEW.md`, the docs they link and `.dev-toolkit/docs/`, so known issues and recorded design decisions are not re-raised or "fixed". Declined comments are carried into the next round so they are not argued twice. It never approves or merges. Consumers enable it with `review-loop@moshfeu-dev-toolkit` in `enabledPlugins`.
+
 ## [1.5.1] - 2026-11-18
 
 ### Changed

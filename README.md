@@ -211,6 +211,16 @@ the same name. Add it to a repo's `.claude/settings.json`:
 { "extraKnownMarketplaces": { "moshfeu-dev-toolkit": { "source": { "source": "github", "repo": "moshfeu/dev-toolkit", "path": "claude-plugin" } } }, "enabledPlugins": { "code-standards@moshfeu-dev-toolkit": true } }
 ```
 
+A second plugin, `review-loop`, adds the `/review-loop` command. It runs
+`/code-review --comment` on the PR, then triages every comment instead of
+accepting it: it verifies against the repo (tests, a repro, running the app),
+fixes what holds up, declines the rest with the evidence, and says "cannot
+verify" for what it can't check here. Up to 3 rounds, or until a round brings
+nothing new. Both the reviewer and the fixer read `AGENTS.md`, `CLAUDE.md`,
+`REVIEW.md` and the other `.md` files first, so known issues and design
+decisions aren't re-raised. Enable it with
+`"review-loop@moshfeu-dev-toolkit": true` in `enabledPlugins`.
+
 The logging/PII section of the skill is intentionally left as a template —
 adapt it per repo (e.g. naming a real pseudonymization helper) rather than
 copying `my-openclaw`'s jid-specific version verbatim.
