@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "moshfeu-dev-toolkit": {
+      "source": { "source": "github", "repo": "moshfeu/dev-toolkit", "path": "claude-plugin" }
+    }
+  },
+  "enabledPlugins": {
+    "review-loop@moshfeu-dev-toolkit": true
+  }
+}

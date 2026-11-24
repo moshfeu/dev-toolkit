@@ -9,6 +9,12 @@ workflows via `uses: ...@main`, plus the shared ESLint/tsconfig packages and
 the `code-standards` plugin), so a regression here lands in every consumer.
 Note the version a consumer started failing on when reporting a problem.
 
+## [1.6.1] - 2026-11-24
+
+### Changed
+
+- `review-loop`: removed `.claude/skills/review-loop/SKILL.md` and its sync test, added in 1.6.0. Tried in a `my-openclaw` session with this repo attached, the skill did not load: attaching a repo does not load its skills. The copy only worked when this repo was the session's own repo, and a copy in a consumer drifts (`my-openclaw`'s copied `code-standards` skill already differs from the plugin's). The plugin route, `review-loop@moshfeu-dev-toolkit` in the consumer's `.claude/settings.json` `enabledPlugins`, is the one supported way; the README now says so. This repo enables the plugin the same way, in its own `.claude/settings.json`, so `/review-loop` should be available here too. The plugin route has not been exercised in a live new session as of this release.
+
 ## [1.6.0] - 2026-11-24
 
 ### Added
