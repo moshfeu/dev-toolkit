@@ -6,6 +6,11 @@
       "name": "code-standards",
       "source": "./plugins/code-standards",
       "description": "Generic comment/test-helper/constant-placement standards, adapted per-repo for logging/PII specifics."
+    },
+    {
+      "name": "review-loop",
+      "source": "./plugins/review-loop",
+      "description": "/review-loop: run /code-review --comment, triage each comment critically (verify, decline what doesn't hold up), fix, repeat up to 3 rounds."
     }
   ]
 }
