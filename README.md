@@ -219,9 +219,13 @@ verify" for what it can't check here. Up to 3 rounds, or until a round brings
 nothing new. Both the reviewer and the fixer read `AGENTS.md`, `CLAUDE.md`,
 `REVIEW.md` and the other `.md` files first, so known issues and design
 decisions aren't re-raised. Enable it with
-`"review-loop@moshfeu-dev-toolkit": true` in `enabledPlugins`. This is the only
-way to get it: attaching this repo to a session (`add_repo`) does not load its
-skills, and a copied `SKILL.md` in the consumer drifts from this one.
+`"review-loop@moshfeu-dev-toolkit": true` in `enabledPlugins`. The plugin is
+the supported route. A regular-file `.claude/skills/review-loop/SKILL.md` did
+not load when this repo was attached to a `my-openclaw` session (`add_repo`).
+This repo now exposes both skills as `.claude/skills/*` symlinks to the plugin
+folders, so there is one source; whether an attached repo loads them is not
+yet verified in a live session. A copied `SKILL.md` in the consumer drifts
+from this one.
 
 The logging/PII section of the skill is intentionally left as a template —
 adapt it per repo (e.g. naming a real pseudonymization helper) rather than
