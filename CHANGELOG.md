@@ -9,6 +9,16 @@ workflows via `uses: ...@main`, plus the shared ESLint/tsconfig packages and
 the `code-standards` plugin), so a regression here lands in every consumer.
 Note the version a consumer started failing on when reporting a problem.
 
+## [1.6.1] - 2026-11-24
+
+### Changed
+
+- `review-loop`: removed `.claude/skills/review-loop/SKILL.md` and its sync test, added in 1.6.0. Tried in a `my-openclaw` session with this repo attached, the skill did not load: attaching a repo does not load its skills. The copy only worked when this repo was the session's own repo, and a copy in a consumer drifts (`my-openclaw`'s copied `code-standards` skill already differs from the plugin's). The plugin route, `review-loop@moshfeu-dev-toolkit` in the consumer's `.claude/settings.json` `enabledPlugins`, is the one supported way; the README now says so. This repo enables the plugin the same way, in its own `.claude/settings.json`, so `/review-loop` should be available here too. The plugin route has not been exercised in a live new session as of this release.
+
+### Added
+
+- `.claude/skills/code-standards` and `.claude/skills/review-loop`: git symlinks (mode 120000) to `claude-plugin/plugins/*/skills/*`, so the skills sit in the standard project-skill location with one source and cannot drift (unlike the removed copy). This is an attempt to have them load when this repo is attached to a session. It is not verified: the earlier failure was observed with a regular file at the same path, and a symlink changes only the file type, so it may fail the same way. Verify in a fresh session with this repo attached as a secondary repo and check that both skills are listed; if not, the plugin route stays the only supported one. A new test (`skill-links.test.ts`) fails if a plugin skill has no symlink or a link is not a link to its folder. The links need symlink support in the checkout (Windows with `core.symlinks=false` turns them into plain files); the consumers and cloud sessions run on Linux.
+
 ## [1.6.0] - 2026-11-24
 
 ### Added
